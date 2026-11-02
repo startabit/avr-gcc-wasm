@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build tools
         run: sudo apt-get update && sudo apt-get install -y build-essential bison flex texinfo python3 xz-utils wget m4 bzip2
       - name: Emscripten 4.0.10
@@ -34,7 +34,7 @@ jobs:
       - name: Logs when it fails
         if: failure()
         run: find ~/avr-wasm -name '*.log' -newer scripts/build.sh -exec sh -c 'echo "=== $1"; tail -60 "$1"' _ {} \;
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: avr-gcc-wasm
           path: dist/
