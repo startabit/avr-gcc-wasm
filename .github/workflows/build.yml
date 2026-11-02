@@ -1,0 +1,45 @@
+name: Build
+# Builds the WebAssembly compiler and the sysroot from the sources in scripts/SHA256SUMS. A tag v* also makes a
+# release with the built files and every source archive they come from.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex texinfo python3 xz-utils wget m4 bzip2
+      - name: Emscripten 4.0.10
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 4.0.10
+          ~/emsdk/emsdk activate 4.0.10
+      - name: Compiler (cc1plus, as, ld, objcopy)
+        run: bash scripts/build.sh all
+      - name: Sysroot (headers, libraries, Arduino core)
+        run: python3 scripts/sysroot.py ~/avr-wasm out dist
+      - name: Pack
+        run: |
+          for tool in cc1plus as ld objcopy; do cp out/$tool.mjs dist/; gzip -9 -c out/$tool.wasm > dist/$tool.wasm.gz; done
+          gzip -9 -c dist/sysroot.tar > dist/sysroot.tar.gz && rm dist/sysroot.tar
+          cp README.md COPYING dist/
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -la dist
+      - name: Logs when it fails
+        if: failure()
+        run: find ~/avr-wasm -name '*.log' -newer scripts/build.sh -exec sh -c 'echo "=== $1"; tail -60 "$1"' _ {} \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: avr-gcc-wasm
+          path: dist/
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* ~/avr-wasm/src/*.tar.* ~/avr-wasm/src/*.patch --title "$GITHUB_REF_NAME" --notes-file README.md
